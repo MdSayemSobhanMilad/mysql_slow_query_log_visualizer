@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>MySQL Slow Query Log Visualizer</title>
 <!-- Bootstrap Icons -->
+ <link rel="icon" type="image/jpg" href="favicon.jpg">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
 <style>
   :root{
@@ -179,8 +180,6 @@
   .legend span{display:flex;align-items:center;gap:6px}
   .legend i{width:10px;height:10px;border-radius:50%;display:inline-block}
 
-  .grid2{display:grid;grid-template-columns:1.15fr .85fr;gap:20px}
-  @media(max-width:900px){.grid2{grid-template-columns:1fr}}
   .notebar{font-size:12px;color:var(--muted);margin-top:10px}
 
   /* =========================================================
@@ -425,22 +424,24 @@
 
     <div class="stats" id="stats"></div>
 
-    <div class="grid2">
-      <div class="card">
-        <h2 class="sec"><i class="bi bi-fire"></i> Top Query Patterns <small>by total time</small></h2>
-        <div id="topQueries"></div>
-      </div>
-      <div class="card">
-        <h2 class="sec"><i class="bi bi-graph-up"></i> Query Time Timeline</h2>
-        <div id="timelineWrap"><canvas id="timelineChart"></canvas></div>
-        <div class="legend">
-          <span><i style="background:#4dabf7"></i> Query</span>
-          <span><i style="background:#f85149"></i> Slowest</span>
-        </div>
-        <div class="notebar" id="timelineNote"></div>
-      </div>
+    <!-- Top Query Patterns (full width) -->
+    <div class="card">
+      <h2 class="sec"><i class="bi bi-fire"></i> Top Query Patterns <small>by total time</small></h2>
+      <div id="topQueries"></div>
     </div>
 
+    <!-- Query Time Timeline (full width, below patterns) -->
+    <div class="card">
+      <h2 class="sec"><i class="bi bi-graph-up"></i> Query Time Timeline</h2>
+      <div id="timelineWrap"><canvas id="timelineChart"></canvas></div>
+      <div class="legend">
+        <span><i style="background:#4dabf7"></i> Query</span>
+        <span><i style="background:#f85149"></i> Slowest</span>
+      </div>
+      <div class="notebar" id="timelineNote"></div>
+    </div>
+
+    <!-- All Slow Queries table -->
     <div class="card">
       <h2 class="sec"><i class="bi bi-table"></i> All Slow Queries <small id="tableCount"></small></h2>
       <div class="filters">
@@ -531,17 +532,14 @@ function prPillClass(t){
   return 'green';
 }
 
-/* Sanitize a string so it's safe to use inside a filename */
 function sanitizeFilenamePart(str){
   return String(str || '')
-    .replace(/[^a-zA-Z0-9._-]+/g, '-')   // replace unsafe chars with hyphen
-    .replace(/^-+|-+$/g, '')             // trim leading/trailing hyphens
-    .slice(0, 60);                       // keep it reasonably short
+    .replace(/[^a-zA-Z0-9._-]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 60);
 }
 
-/* Build the PDF base filename (no extension).
-   Pattern: DD-MM-YYYY_[username_]slow-query
-   - user part included only when a specific user is selected in the filter */
+/* Build the PDF base filename: DD-MM-YYYY_[username_]slow-query */
 function buildPdfName(){
   const now = new Date();
   const dd = String(now.getDate()).padStart(2, '0');
@@ -865,7 +863,7 @@ function renderTopQueries(){
 
     const sql = document.createElement('span');
     sql.className = 'bar-sql';
-    sql.textContent = g.sql.replace(/\s+/g, ' ').slice(0, 160);
+    sql.textContent = g.sql.replace(/\s+/g, ' ').slice(0, 200);
     sql.title = g.sql;
 
     const val = document.createElement('span');
@@ -890,7 +888,7 @@ function renderTopQueries(){
 }
 
 /* =========================================================
-   Timeline chart
+   Timeline chart (full-width now)
    ========================================================= */
 function renderTimeline(){
   const pts = FILTERED.filter(d => d.ts != null);
@@ -907,8 +905,8 @@ function renderTimeline(){
 
   const canvas = $('#timelineChart');
   const dpr = window.devicePixelRatio || 1;
-  const W = wrap.clientWidth || 480;
-  const H = 280;
+  const W = wrap.clientWidth || 900;
+  const H = 340;                       // a bit taller since it's full width
   canvas.width = W * dpr;
   canvas.height = H * dpr;
   canvas.style.width = W + 'px';
@@ -918,7 +916,7 @@ function renderTimeline(){
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.clearRect(0, 0, W, H);
 
-  const padL = 62, padR = 16, padT = 16, padB = 38;
+  const padL = 68, padR = 20, padT = 20, padB = 44;
   const plotW = W - padL - padR;
   const plotH = H - padT - padB;
 
@@ -930,9 +928,10 @@ function renderTimeline(){
   const X = t => padL + ((t - tMin) / tRange) * plotW;
   const Y = v => padT + plotH - (v / yMax) * plotH;
 
+  // Y grid + labels
   ctx.font = '11px ui-monospace, Menlo, monospace';
   ctx.textBaseline = 'middle';
-  const steps = 4;
+  const steps = 5;
   for (let i = 0; i <= steps; i++){
     const v = (yMax / steps) * i;
     const y = Y(v);
@@ -945,22 +944,24 @@ function renderTimeline(){
 
     ctx.fillStyle = '#8b98a5';
     ctx.textAlign = 'right';
-    ctx.fillText(v.toFixed(2) + 's', padL - 8, y);
+    ctx.fillText(v.toFixed(2) + 's', padL - 10, y);
   }
 
+  // X labels (6 across full width)
   ctx.textAlign = 'center';
   ctx.textBaseline = 'top';
-  for (let i = 0; i <= 4; i++){
-    const t = tMin + (tRange / 4) * i;
+  for (let i = 0; i <= 6; i++){
+    const t = tMin + (tRange / 6) * i;
     const x = X(t);
     ctx.fillStyle = '#8b98a5';
     const d = new Date(t);
     ctx.fillText(
       d.toLocaleTimeString(undefined, {hour:'2-digit', minute:'2-digit', second:'2-digit'}),
-      x, padT + plotH + 10
+      x, padT + plotH + 12
     );
   }
 
+  // Points
   const slowest = pts.reduce((a, b) => (b.queryTime > a.queryTime ? b : a), pts[0]);
   pts.forEach(p => {
     const x = X(p.ts);
@@ -982,6 +983,7 @@ function renderTimeline(){
     ctx.stroke();
   });
 
+  // Axes
   ctx.strokeStyle = '#2a3441';
   ctx.beginPath();
   ctx.moveTo(padL + .5, padT);
@@ -1080,7 +1082,7 @@ function renderTable(){
 }
 
 /* =========================================================
-   PDF EXPORT (styled print report + user-aware filename)
+   PDF EXPORT
    ========================================================= */
 $('#btnPdf').addEventListener('click', exportPDF);
 
@@ -1089,16 +1091,14 @@ function exportPDF(){
 
   buildPrintReport();
 
-  // Filename pattern: DD-MM-YYYY_[username_]slow-query
   const pdfName = buildPdfName();
-
   const originalTitle = document.title;
-  document.title = pdfName;   // browsers use document.title as the default PDF filename
+  document.title = pdfName;
 
   requestAnimationFrame(() => {
     setTimeout(() => {
       try {
-        window.print();       // synchronous in most browsers
+        window.print();
       } finally {
         setTimeout(() => { document.title = originalTitle; }, 200);
       }
@@ -1119,7 +1119,6 @@ function buildPrintReport(){
 
   const generated = new Date().toLocaleString();
 
-  // Reflect the CURRENT filters in the PDF subtitle
   const filtersActive = [];
   const q = $('#search').value.trim();
   const userF = $('#userFilter').value;
@@ -1131,7 +1130,6 @@ function buildPrintReport(){
     ? `Filtered by ${filtersActive.join(' · ')}`
     : 'No filters applied';
 
-  // Stat cards
   const tsPoints = data.filter(d => d.ts).map(d => d.ts);
   const timeRange = tsPoints.length
     ? `${fmtTs(Math.min(...tsPoints))} → ${fmtTs(Math.max(...tsPoints))}`
@@ -1156,7 +1154,6 @@ function buildPrintReport(){
       <div class="s">${escHtml(s)}</div>
     </div>`).join('');
 
-  // Top query patterns
   const groups = new Map();
   data.forEach(e => {
     let g = groups.get(e.normalized);
@@ -1179,7 +1176,6 @@ function buildPrintReport(){
       </div>`;
   }).join('');
 
-  // Table rows
   const rowsHtml = data.map((e, i) => `
     <tr>
       <td class="num" style="color:#8a95a1">${i + 1}</td>
@@ -1192,7 +1188,6 @@ function buildPrintReport(){
       <td><div class="pr-sql">${escHtml(e.sql.replace(/\s+/g,' '))}</div></td>
     </tr>`).join('');
 
-  // Report name inside the doc — same pattern as the filename
   const reportName = buildPdfName();
 
   const html = `
