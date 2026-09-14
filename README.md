@@ -2,11 +2,16 @@
 
 A single-file, browser-based tool that turns raw MySQL slow query logs into an interactive visual report. Upload a `slow-query.log` file or paste log text directly, then explore timings, spot the slowest queries, filter by user, and export a polished PDF report — all without a server, build step, or dependencies.
 
+> **🚀 Live Demo:** [https://mysql-slow-query-log-visualizer.vercel.app/](https://mysql-slow-query-log-visualizer.vercel.app/)
+>
+> Try it instantly in your browser — no installation needed.
+
 ---
 
 ## Table of Contents
 
 - [Features](#features)
+- [Live Demo](#live-demo)
 - [Quick Start](#quick-start)
 - [Usage](#usage)
   - [Loading a log](#loading-a-log)
@@ -43,13 +48,29 @@ A single-file, browser-based tool that turns raw MySQL slow query logs into an i
 
 ---
 
+## Live Demo
+
+**Try it now:** [https://mysql-slow-query-log-visualizer.vercel.app/](https://mysql-slow-query-log-visualizer.vercel.app/)
+
+The hosted version is the same single-file application — nothing is uploaded to a server, and all parsing, filtering, and PDF generation happen entirely in your browser. You can safely paste real logs without worrying about data leaving your machine.
+
+If you prefer to run it locally, follow the [Quick Start](#quick-start) steps below.
+
+---
+
 ## Quick Start
+
+### Option 1 — Use the hosted version (fastest)
+
+Open [https://mysql-slow-query-log-visualizer.vercel.app/](https://mysql-slow-query-log-visualizer.vercel.app/) in any modern browser. Done.
+
+### Option 2 — Run it locally
 
 1. Download or clone this repository.
 2. Open `slow-query-visualizer.html` in any modern browser.
 3. Drop in a slow query log file, or paste log text and click **Visualize**.
 
-That's it. There is no server, no installation, and no configuration.
+There is no server, no installation, and no configuration.
 
 ```bash
 git clone https://github.com/<your-username>/mysql-slow-query-visualizer.git
