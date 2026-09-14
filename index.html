@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>MySQL Slow Query Log Visualizer</title>
 <!-- Bootstrap Icons -->
- <link rel="icon" type="image/jpg" href="favicon.jpg">
+<link rel="icon" type="image/jpg" href="favicon.jpg">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
 <style>
   :root{
@@ -188,6 +188,7 @@
   #printReport{ display:none; }
 
   @media print{
+    /* default (light mode) */
     body{ background:#fff !important; color:#111 !important; padding:0 !important; }
     .wrap > *:not(#printReport){ display:none !important; }
     #printReport{ display:block !important; }
@@ -202,6 +203,37 @@
       font-size:11px;
       line-height:1.45;
     }
+
+    /* ---------- DARK PDF MODE OVERRIDES ---------- */
+    body.print-dark{ background:#0d1117 !important; color:#e6edf3 !important; }
+    body.print-dark #printReport{ color:#e6edf3; }
+    body.print-dark .pr-header{ border-bottom-color:#4dabf7; }
+    body.print-dark .pr-title{ color:#e6edf3; }
+    body.print-dark .pr-title i{ color:#4dabf7; }
+    body.print-dark .pr-subtitle{ color:#8b98a5; }
+    body.print-dark .pr-meta{ color:#8b98a5; }
+    body.print-dark .pr-meta strong{ color:#e6edf3; }
+    body.print-dark .pr-stat{ background:#1c2430; border-color:#2a3441; }
+    body.print-dark .pr-stat .k{ color:#8b98a5; }
+    body.print-dark .pr-stat .v{ color:#e6edf3; }
+    body.print-dark .pr-stat .s{ color:#8b98a5; }
+    body.print-dark .pr-h2{ color:#4dabf7; border-bottom-color:#2a3441; }
+    body.print-dark .pr-h2 small{ color:#8b98a5; }
+    body.print-dark .pr-bar-sql{ color:#c9d1d9; }
+    body.print-dark .pr-bar-val{ color:#8b98a5; }
+    body.print-dark .pr-bar-val b{ color:#4dabf7; }
+    body.print-dark .pr-bar-track{ background:#0b0f14; border-color:#232d3b; }
+    body.print-dark .pr-tablewrap{ border-color:#2a3441; }
+    body.print-dark .pr-table thead th{ background:#1f6feb; color:#fff; }
+    body.print-dark .pr-table tbody td{ color:#e6edf3; border-bottom-color:#1e2732; }
+    body.print-dark .pr-table tbody tr:nth-child(even){ background:#1a222d; }
+    body.print-dark .pr-table .pr-sql{ color:#a8b3bd; }
+    body.print-dark .pr-table td.num{ color:#c9d1d9; }
+    body.print-dark .pr-footer{ color:#8b98a5; border-top-color:#2a3441; }
+    body.print-dark .pr-timeline-wrap{ border-color:#2a3441; background:#0b0f14; }
+    body.print-dark .pr-pill.red{ background:#f8514922; color:#ff7b72; border:1px solid #f8514955; }
+    body.print-dark .pr-pill.yellow{ background:#d2992222; color:#e3b341; border:1px solid #d2992255; }
+    body.print-dark .pr-pill.green{ background:#3fb95022; color:#56d364; border:1px solid #3fb95055; }
 
     .pr-header{
       border-bottom:3px solid #1f6feb;
@@ -299,6 +331,20 @@
       height:6px; background:#eef1f5; border-radius:4px; overflow:hidden; border:1px solid #e0e6ec;
     }
     .pr-bar-fill{ height:100%; border-radius:4px; }
+
+    /* ---------- TIMELINE IMAGE CONTAINER ---------- */
+    .pr-timeline-wrap{
+      border:1px solid #d6dde5;
+      border-radius:8px;
+      overflow:hidden;
+      background:#fff;
+      page-break-inside:avoid;
+    }
+    .pr-timeline-wrap img{
+      display:block;
+      width:100%;
+      height:auto;
+    }
 
     .pr-tablewrap{
       border:1px solid #d6dde5;
@@ -424,13 +470,13 @@
 
     <div class="stats" id="stats"></div>
 
-    <!-- Top Query Patterns (full width) -->
+    <!-- Top Query Patterns -->
     <div class="card">
       <h2 class="sec"><i class="bi bi-fire"></i> Top Query Patterns <small>by total time</small></h2>
       <div id="topQueries"></div>
     </div>
 
-    <!-- Query Time Timeline (full width, below patterns) -->
+    <!-- Query Time Timeline -->
     <div class="card">
       <h2 class="sec"><i class="bi bi-graph-up"></i> Query Time Timeline</h2>
       <div id="timelineWrap"><canvas id="timelineChart"></canvas></div>
@@ -459,6 +505,11 @@
           <option value="ts-asc">Timestamp ↑</option>
           <option value="ts-desc">Timestamp ↓</option>
           <option value="rows-desc">Rows examined ↓</option>
+        </select>
+        <label for="pdfMode"><i class="bi bi-palette"></i> PDF Mode</label>
+        <select id="pdfMode">
+          <option value="light">Light</option>
+          <option value="dark">Dark</option>
         </select>
         <button class="btn" id="btnPdf" style="padding:9px 16px"><i class="bi bi-file-earmark-pdf"></i> Export PDF</button>
       </div>
@@ -888,8 +939,138 @@ function renderTopQueries(){
 }
 
 /* =========================================================
-   Timeline chart (full-width now)
+   Timeline drawing (shared by on-screen & PDF export)
    ========================================================= */
+function drawTimeline(canvas, W, H, pts, theme, forPrint){
+  // For print we always render at 2x for crispness; on-screen uses device DPR
+  const dpr = forPrint ? 2 : (window.devicePixelRatio || 1);
+  canvas.width = W * dpr;
+  canvas.height = H * dpr;
+  if (!forPrint){
+    canvas.style.width = W + 'px';
+    canvas.style.height = H + 'px';
+  }
+
+  const ctx = canvas.getContext('2d');
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, W, H);
+
+  // Theme-specific colours
+  const C = theme === 'dark' ? {
+    bg:       '#0b0f14',
+    grid:     '#232d3b',
+    axis:     '#2a3441',
+    label:    '#8b98a5',
+    dotFill:  'rgba(77,171,247,.85)',
+    dotEdge:  '#4dabf7',
+    dotHalo:  'rgba(77,171,247,.13)',
+    slowFill: '#f85149',
+    slowEdge: '#ff7b72',
+    slowHalo: 'rgba(248,81,73,.18)'
+  } : {
+    bg:       '#ffffff',
+    grid:     '#e6ebf0',
+    axis:     '#c8d0d9',
+    label:    '#5a6672',
+    dotFill:  'rgba(31,111,235,.85)',
+    dotEdge:  '#1f6feb',
+    dotHalo:  'rgba(31,111,235,.13)',
+    slowFill: '#b42318',
+    slowEdge: '#b42318',
+    slowHalo: 'rgba(180,35,24,.15)'
+  };
+
+  // Print vs on-screen sizing
+  const P = forPrint ? {
+    fontPx: 22, padL: 100, padR: 30, padT: 30, padB: 62,
+    rBase: 6, rSlow: 10, halo: 5
+  } : {
+    fontPx: 11, padL: 68,  padR: 20, padT: 20, padB: 44,
+    rBase: 4, rSlow: 6,  halo: 4
+  };
+
+  // Background
+  ctx.fillStyle = C.bg;
+  ctx.fillRect(0, 0, W, H);
+
+  const padL = P.padL, padR = P.padR, padT = P.padT, padB = P.padB;
+  const plotW = W - padL - padR;
+  const plotH = H - padT - padB;
+
+  const tMin = Math.min(...pts.map(p => p.ts));
+  const tMax = Math.max(...pts.map(p => p.ts));
+  const tRange = (tMax - tMin) || 1;
+  const yMax = maxOf(pts.map(p => p.queryTime)) * 1.15 || 1;
+
+  const X = t => padL + ((t - tMin) / tRange) * plotW;
+  const Y = v => padT + plotH - (v / yMax) * plotH;
+
+  // Y grid + labels
+  ctx.font = P.fontPx + 'px ui-monospace, Menlo, monospace';
+  ctx.textBaseline = 'middle';
+  const steps = 5;
+  for (let i = 0; i <= steps; i++){
+    const v = (yMax / steps) * i;
+    const y = Y(v);
+    ctx.strokeStyle = C.grid;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(padL, y + .5);
+    ctx.lineTo(W - padR, y + .5);
+    ctx.stroke();
+
+    ctx.fillStyle = C.label;
+    ctx.textAlign = 'right';
+    ctx.fillText(v.toFixed(2) + 's', padL - (P.fontPx * 0.7), y);
+  }
+
+  // X labels
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'top';
+  for (let i = 0; i <= 6; i++){
+    const t = tMin + (tRange / 6) * i;
+    const x = X(t);
+    ctx.fillStyle = C.label;
+    const d = new Date(t);
+    ctx.fillText(
+      d.toLocaleTimeString(undefined, {hour:'2-digit', minute:'2-digit', second:'2-digit'}),
+      x, padT + plotH + (P.fontPx * 0.7)
+    );
+  }
+
+  // Points
+  const slowest = pts.reduce((a, b) => (b.queryTime > a.queryTime ? b : a), pts[0]);
+  pts.forEach(p => {
+    const x = X(p.ts);
+    const y = Y(p.queryTime);
+    const isSlowest = p === slowest;
+    const r = isSlowest ? P.rSlow : P.rBase;
+
+    ctx.beginPath();
+    ctx.arc(x, y, r + P.halo, 0, Math.PI * 2);
+    ctx.fillStyle = isSlowest ? C.slowHalo : C.dotHalo;
+    ctx.fill();
+
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fillStyle = isSlowest ? C.slowFill : C.dotFill;
+    ctx.fill();
+    ctx.strokeStyle = isSlowest ? C.slowEdge : C.dotEdge;
+    ctx.lineWidth = forPrint ? 2 : 1.5;
+    ctx.stroke();
+  });
+
+  // Axes
+  ctx.strokeStyle = C.axis;
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(padL + .5, padT);
+  ctx.lineTo(padL + .5, padT + plotH);
+  ctx.lineTo(W - padR, padT + plotH);
+  ctx.stroke();
+}
+
+/* On-screen timeline (always dark to match site) */
 function renderTimeline(){
   const pts = FILTERED.filter(d => d.ts != null);
   const note = $('#timelineNote');
@@ -904,92 +1085,19 @@ function renderTimeline(){
   note.textContent = `${pts.length} timestamped queries`;
 
   const canvas = $('#timelineChart');
-  const dpr = window.devicePixelRatio || 1;
   const W = wrap.clientWidth || 900;
-  const H = 340;                       // a bit taller since it's full width
-  canvas.width = W * dpr;
-  canvas.height = H * dpr;
-  canvas.style.width = W + 'px';
-  canvas.style.height = H + 'px';
+  const H = 340;
+  drawTimeline(canvas, W, H, pts, 'dark', false);
+}
 
-  const ctx = canvas.getContext('2d');
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  ctx.clearRect(0, 0, W, H);
-
-  const padL = 68, padR = 20, padT = 20, padB = 44;
-  const plotW = W - padL - padR;
-  const plotH = H - padT - padB;
-
-  const tMin = Math.min(...pts.map(p => p.ts));
-  const tMax = Math.max(...pts.map(p => p.ts));
-  const tRange = (tMax - tMin) || 1;
-  const yMax = maxOf(pts.map(p => p.queryTime)) * 1.15 || 1;
-
-  const X = t => padL + ((t - tMin) / tRange) * plotW;
-  const Y = v => padT + plotH - (v / yMax) * plotH;
-
-  // Y grid + labels
-  ctx.font = '11px ui-monospace, Menlo, monospace';
-  ctx.textBaseline = 'middle';
-  const steps = 5;
-  for (let i = 0; i <= steps; i++){
-    const v = (yMax / steps) * i;
-    const y = Y(v);
-    ctx.strokeStyle = '#232d3b';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(padL, y + .5);
-    ctx.lineTo(W - padR, y + .5);
-    ctx.stroke();
-
-    ctx.fillStyle = '#8b98a5';
-    ctx.textAlign = 'right';
-    ctx.fillText(v.toFixed(2) + 's', padL - 10, y);
-  }
-
-  // X labels (6 across full width)
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'top';
-  for (let i = 0; i <= 6; i++){
-    const t = tMin + (tRange / 6) * i;
-    const x = X(t);
-    ctx.fillStyle = '#8b98a5';
-    const d = new Date(t);
-    ctx.fillText(
-      d.toLocaleTimeString(undefined, {hour:'2-digit', minute:'2-digit', second:'2-digit'}),
-      x, padT + plotH + 12
-    );
-  }
-
-  // Points
-  const slowest = pts.reduce((a, b) => (b.queryTime > a.queryTime ? b : a), pts[0]);
-  pts.forEach(p => {
-    const x = X(p.ts);
-    const y = Y(p.queryTime);
-    const isSlowest = p === slowest;
-    const r = isSlowest ? 6 : 4;
-
-    ctx.beginPath();
-    ctx.arc(x, y, r + 4, 0, Math.PI * 2);
-    ctx.fillStyle = isSlowest ? 'rgba(248,81,73,.18)' : 'rgba(77,171,247,.13)';
-    ctx.fill();
-
-    ctx.beginPath();
-    ctx.arc(x, y, r, 0, Math.PI * 2);
-    ctx.fillStyle = isSlowest ? '#f85149' : 'rgba(77,171,247,.85)';
-    ctx.fill();
-    ctx.strokeStyle = isSlowest ? '#ff7b72' : '#4dabf7';
-    ctx.lineWidth = 1.5;
-    ctx.stroke();
-  });
-
-  // Axes
-  ctx.strokeStyle = '#2a3441';
-  ctx.beginPath();
-  ctx.moveTo(padL + .5, padT);
-  ctx.lineTo(padL + .5, padT + plotH);
-  ctx.lineTo(W - padR, padT + plotH);
-  ctx.stroke();
+/* Off-screen timeline rendered as PNG data URL for the PDF */
+function getTimelineDataURL(mode){
+  const pts = FILTERED.filter(d => d.ts != null);
+  if (pts.length < 2) return null;
+  const off = document.createElement('canvas');
+  const W = 1200, H = 380;
+  drawTimeline(off, W, H, pts, mode === 'dark' ? 'dark' : 'light', true);
+  return off.toDataURL('image/png');
 }
 
 let resizeTimer;
@@ -1089,24 +1197,32 @@ $('#btnPdf').addEventListener('click', exportPDF);
 function exportPDF(){
   if (!FILTERED.length){ alert('Nothing to export — no queries match the current filters.'); return; }
 
-  buildPrintReport();
+  const mode = ($('#pdfMode').value === 'dark') ? 'dark' : 'light';
+
+  buildPrintReport(mode);
 
   const pdfName = buildPdfName();
   const originalTitle = document.title;
   document.title = pdfName;
+
+  // Toggle dark print styling on <body>
+  document.body.classList.toggle('print-dark', mode === 'dark');
 
   requestAnimationFrame(() => {
     setTimeout(() => {
       try {
         window.print();
       } finally {
-        setTimeout(() => { document.title = originalTitle; }, 200);
+        setTimeout(() => {
+          document.title = originalTitle;
+          document.body.classList.remove('print-dark');
+        }, 200);
       }
     }, 60);
   });
 }
 
-function buildPrintReport(){
+function buildPrintReport(mode){
   const data = FILTERED;
   const times = data.map(d => d.queryTime);
   const total = times.reduce((a, b) => a + b, 0);
@@ -1154,6 +1270,7 @@ function buildPrintReport(){
       <div class="s">${escHtml(s)}</div>
     </div>`).join('');
 
+  // Top query patterns
   const groups = new Map();
   data.forEach(e => {
     let g = groups.get(e.normalized);
@@ -1176,6 +1293,21 @@ function buildPrintReport(){
       </div>`;
   }).join('');
 
+  // Timeline image for the PDF (generated with the matching theme)
+  const timelineDataUrl = getTimelineDataURL(mode);
+  const timelineHtml = timelineDataUrl ? `
+    <div class="pr-section">
+      <div class="pr-h2">
+        <span><i class="bi bi-graph-up"></i> Query Time Timeline</span>
+        <small>${FILTERED.filter(d => d.ts).length} timestamped queries</small>
+      </div>
+      <div class="pr-timeline-wrap">
+        <img src="${timelineDataUrl}" alt="Query Time Timeline">
+      </div>
+    </div>
+  ` : '';
+
+  // Table rows
   const rowsHtml = data.map((e, i) => `
     <tr>
       <td class="num" style="color:#8a95a1">${i + 1}</td>
@@ -1211,6 +1343,8 @@ function buildPrintReport(){
       <div class="pr-h2"><span><i class="bi bi-fire"></i> Top Query Patterns</span> <small>grouped by normalized SQL, ranked by total time</small></div>
       ${topHtml || '<div style="color:#8a95a1;font-size:10px">No patterns found.</div>'}
     </div>
+
+    ${timelineHtml}
 
     <div class="pr-section">
       <div class="pr-h2"><span><i class="bi bi-table"></i> Slow Query Detail</span> <small>${fmtNum(data.length)} ${data.length === 1 ? 'entry' : 'entries'}</small></div>
@@ -1333,6 +1467,7 @@ $('#btnClear').addEventListener('click', () => {
   $('#minTime').value = 0;
   $('#sortBy').value = 'time-desc';
   $('#userFilter').innerHTML = '<option value="">All users</option>';
+  $('#pdfMode').value = 'light';
 });
 </script>
 </body>
