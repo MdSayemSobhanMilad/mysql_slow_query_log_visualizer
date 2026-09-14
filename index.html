@@ -188,25 +188,47 @@
   #printReport{ display:none; }
 
   @media print{
-    /* default (light mode) */
-    body{ background:#fff !important; color:#111 !important; padding:0 !important; }
+    /* Remove browser page margins so the dark background can fill the page. */
+    @page{ size:A4 portrait; margin:0; }
+
+    html, body{
+      margin:0 !important;
+      padding:0 !important;
+      background:#fff !important;
+    }
+    html{ background:#fff !important; }
+
+    /* Dark mode: paint the whole page dark (html + body) */
+    html.print-dark,
+    html.print-dark body,
+    body.print-dark{
+      background:#0d1117 !important;
+      color:#e6edf3 !important;
+    }
+
     .wrap > *:not(#printReport){ display:none !important; }
     #printReport{ display:block !important; }
 
-    @page{ size:A4 portrait; margin:14mm 12mm; }
-
     * { -webkit-print-color-adjust:exact !important; print-color-adjust:exact !important; }
 
+    /* ===== Base report (light mode) ===== */
     #printReport{
+      padding: 16mm 14mm;
       font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
       color:#1a1f27;
       font-size:11px;
       line-height:1.45;
+      box-sizing:border-box;
+    }
+
+    /* ===== Dark mode gets extra padding ===== */
+    html.print-dark #printReport,
+    body.print-dark #printReport{
+      padding: 20mm 17mm;
+      color:#e6edf3;
     }
 
     /* ---------- DARK PDF MODE OVERRIDES ---------- */
-    body.print-dark{ background:#0d1117 !important; color:#e6edf3 !important; }
-    body.print-dark #printReport{ color:#e6edf3; }
     body.print-dark .pr-header{ border-bottom-color:#4dabf7; }
     body.print-dark .pr-title{ color:#e6edf3; }
     body.print-dark .pr-title i{ color:#4dabf7; }
@@ -332,7 +354,6 @@
     }
     .pr-bar-fill{ height:100%; border-radius:4px; }
 
-    /* ---------- TIMELINE IMAGE CONTAINER ---------- */
     .pr-timeline-wrap{
       border:1px solid #d6dde5;
       border-radius:8px;
@@ -381,6 +402,19 @@
       font-family:ui-monospace,Menlo,Consolas,monospace;
       white-space:nowrap;
     }
+    /* Timestamp column: allow wrapping onto two lines, no overlap */
+    .pr-table td.pr-ts{
+      white-space:normal;
+      word-break:break-word;
+      overflow-wrap:anywhere;
+      line-height:1.3;
+      font-family:ui-monospace,Menlo,Consolas,monospace;
+    }
+    .pr-table td.pr-ts .ts-date{ color:#3a4553; }
+    .pr-table td.pr-ts .ts-time{ color:#5a6672; }
+    body.print-dark .pr-table td.pr-ts .ts-date{ color:#c9d1d9; }
+    body.print-dark .pr-table td.pr-ts .ts-time{ color:#8b98a5; }
+
     .pr-table .pr-sql{
       font-family:ui-monospace,Menlo,Consolas,monospace;
       font-size:8.5px;
@@ -400,14 +434,15 @@
     .pr-pill.yellow{ background:#fdf3d7; color:#8a5a00; border:1px solid #f0d68a; }
     .pr-pill.green{ background:#e3f6e8; color:#1a7f37; border:1px solid #a8dfb8; }
 
+    /* Widened timestamp column, trimmed SQL column to keep 100% */
     .pr-table col.c-idx{ width:3%; }
-    .pr-table col.c-ts{ width:13%; }
+    .pr-table col.c-ts{ width:17%; }
     .pr-table col.c-qt{ width:8%; }
     .pr-table col.c-lk{ width:7%; }
     .pr-table col.c-sent{ width:7%; }
     .pr-table col.c-exam{ width:9%; }
-    .pr-table col.c-user{ width:12%; }
-    .pr-table col.c-sql{ width:41%; }
+    .pr-table col.c-user{ width:11%; }
+    .pr-table col.c-sql{ width:38%; }
 
     .pr-footer{
       margin-top:18px;
@@ -470,13 +505,11 @@
 
     <div class="stats" id="stats"></div>
 
-    <!-- Top Query Patterns -->
     <div class="card">
       <h2 class="sec"><i class="bi bi-fire"></i> Top Query Patterns <small>by total time</small></h2>
       <div id="topQueries"></div>
     </div>
 
-    <!-- Query Time Timeline -->
     <div class="card">
       <h2 class="sec"><i class="bi bi-graph-up"></i> Query Time Timeline</h2>
       <div id="timelineWrap"><canvas id="timelineChart"></canvas></div>
@@ -487,7 +520,6 @@
       <div class="notebar" id="timelineNote"></div>
     </div>
 
-    <!-- All Slow Queries table -->
     <div class="card">
       <h2 class="sec"><i class="bi bi-table"></i> All Slow Queries <small id="tableCount"></small></h2>
       <div class="filters">
@@ -562,6 +594,14 @@ function fmtTs(ts){
   return d.toLocaleString(undefined, {year:'numeric',month:'2-digit',day:'2-digit',
     hour:'2-digit',minute:'2-digit',second:'2-digit'});
 }
+/* Split a timestamp into date and time parts — used in the PDF table for wrapping */
+function fmtTsParts(ts){
+  if (ts == null) return { date: '—', time: '' };
+  const d = new Date(ts);
+  const date = d.toLocaleDateString(undefined, {year:'numeric',month:'2-digit',day:'2-digit'});
+  const time = d.toLocaleTimeString(undefined, {hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  return { date, time };
+}
 function sevClass(t){
   if (t >= 5) return 'p-red';
   if (t >= 1) return 'p-yellow';
@@ -590,7 +630,6 @@ function sanitizeFilenamePart(str){
     .slice(0, 60);
 }
 
-/* Build the PDF base filename: DD-MM-YYYY_[username_]slow-query */
 function buildPdfName(){
   const now = new Date();
   const dd = String(now.getDate()).padStart(2, '0');
@@ -939,10 +978,9 @@ function renderTopQueries(){
 }
 
 /* =========================================================
-   Timeline drawing (shared by on-screen & PDF export)
+   Timeline drawing
    ========================================================= */
 function drawTimeline(canvas, W, H, pts, theme, forPrint){
-  // For print we always render at 2x for crispness; on-screen uses device DPR
   const dpr = forPrint ? 2 : (window.devicePixelRatio || 1);
   canvas.width = W * dpr;
   canvas.height = H * dpr;
@@ -955,7 +993,6 @@ function drawTimeline(canvas, W, H, pts, theme, forPrint){
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.clearRect(0, 0, W, H);
 
-  // Theme-specific colours
   const C = theme === 'dark' ? {
     bg:       '#0b0f14',
     grid:     '#232d3b',
@@ -980,7 +1017,6 @@ function drawTimeline(canvas, W, H, pts, theme, forPrint){
     slowHalo: 'rgba(180,35,24,.15)'
   };
 
-  // Print vs on-screen sizing
   const P = forPrint ? {
     fontPx: 22, padL: 100, padR: 30, padT: 30, padB: 62,
     rBase: 6, rSlow: 10, halo: 5
@@ -989,7 +1025,6 @@ function drawTimeline(canvas, W, H, pts, theme, forPrint){
     rBase: 4, rSlow: 6,  halo: 4
   };
 
-  // Background
   ctx.fillStyle = C.bg;
   ctx.fillRect(0, 0, W, H);
 
@@ -1005,7 +1040,6 @@ function drawTimeline(canvas, W, H, pts, theme, forPrint){
   const X = t => padL + ((t - tMin) / tRange) * plotW;
   const Y = v => padT + plotH - (v / yMax) * plotH;
 
-  // Y grid + labels
   ctx.font = P.fontPx + 'px ui-monospace, Menlo, monospace';
   ctx.textBaseline = 'middle';
   const steps = 5;
@@ -1024,7 +1058,6 @@ function drawTimeline(canvas, W, H, pts, theme, forPrint){
     ctx.fillText(v.toFixed(2) + 's', padL - (P.fontPx * 0.7), y);
   }
 
-  // X labels
   ctx.textAlign = 'center';
   ctx.textBaseline = 'top';
   for (let i = 0; i <= 6; i++){
@@ -1038,7 +1071,6 @@ function drawTimeline(canvas, W, H, pts, theme, forPrint){
     );
   }
 
-  // Points
   const slowest = pts.reduce((a, b) => (b.queryTime > a.queryTime ? b : a), pts[0]);
   pts.forEach(p => {
     const x = X(p.ts);
@@ -1060,7 +1092,6 @@ function drawTimeline(canvas, W, H, pts, theme, forPrint){
     ctx.stroke();
   });
 
-  // Axes
   ctx.strokeStyle = C.axis;
   ctx.lineWidth = 1;
   ctx.beginPath();
@@ -1070,7 +1101,6 @@ function drawTimeline(canvas, W, H, pts, theme, forPrint){
   ctx.stroke();
 }
 
-/* On-screen timeline (always dark to match site) */
 function renderTimeline(){
   const pts = FILTERED.filter(d => d.ts != null);
   const note = $('#timelineNote');
@@ -1090,7 +1120,6 @@ function renderTimeline(){
   drawTimeline(canvas, W, H, pts, 'dark', false);
 }
 
-/* Off-screen timeline rendered as PNG data URL for the PDF */
 function getTimelineDataURL(mode){
   const pts = FILTERED.filter(d => d.ts != null);
   if (pts.length < 2) return null;
@@ -1205,7 +1234,7 @@ function exportPDF(){
   const originalTitle = document.title;
   document.title = pdfName;
 
-  // Toggle dark print styling on <body>
+  document.documentElement.classList.toggle('print-dark', mode === 'dark');
   document.body.classList.toggle('print-dark', mode === 'dark');
 
   requestAnimationFrame(() => {
@@ -1215,6 +1244,7 @@ function exportPDF(){
       } finally {
         setTimeout(() => {
           document.title = originalTitle;
+          document.documentElement.classList.remove('print-dark');
           document.body.classList.remove('print-dark');
         }, 200);
       }
@@ -1270,7 +1300,6 @@ function buildPrintReport(mode){
       <div class="s">${escHtml(s)}</div>
     </div>`).join('');
 
-  // Top query patterns
   const groups = new Map();
   data.forEach(e => {
     let g = groups.get(e.normalized);
@@ -1293,7 +1322,6 @@ function buildPrintReport(mode){
       </div>`;
   }).join('');
 
-  // Timeline image for the PDF (generated with the matching theme)
   const timelineDataUrl = getTimelineDataURL(mode);
   const timelineHtml = timelineDataUrl ? `
     <div class="pr-section">
@@ -1307,18 +1335,34 @@ function buildPrintReport(mode){
     </div>
   ` : '';
 
-  // Table rows
-  const rowsHtml = data.map((e, i) => `
+  /* ---- Table rows: split timestamp into date + time so it wraps cleanly ---- */
+  const rowsHtml = data.map((e, i) => {
+    let tsDate = '', tsTime = '';
+    if (e.ts != null){
+      const p = fmtTsParts(e.ts);
+      tsDate = p.date;
+      tsTime = p.time;
+    } else if (e.timeStr){
+      tsDate = e.timeStr;
+      tsTime = '';
+    } else {
+      tsDate = '—';
+    }
+
+    return `
     <tr>
       <td class="num" style="color:#8a95a1">${i + 1}</td>
-      <td class="num">${escHtml(e.ts != null ? fmtTs(e.ts) : (e.timeStr || '—'))}</td>
+      <td class="pr-ts">
+        <span class="ts-date">${escHtml(tsDate)}</span>${tsTime ? `<br><span class="ts-time">${escHtml(tsTime)}</span>` : ''}
+      </td>
       <td><span class="pr-pill ${prPillClass(e.queryTime)}">${escHtml(fmtDur(e.queryTime))}</span></td>
       <td class="num" style="color:#5a6672">${escHtml(e.lockTime != null ? fmtDur(e.lockTime) : '—')}</td>
       <td class="num">${escHtml(fmtNum(e.rowsSent))}</td>
       <td class="num">${escHtml(fmtNum(e.rowsExamined))}</td>
       <td>${escHtml(e.user || '—')}${e.host ? `<br><span style="color:#8a95a1;font-size:8px">${escHtml(e.host)}</span>` : ''}</td>
       <td><div class="pr-sql">${escHtml(e.sql.replace(/\s+/g,' '))}</div></td>
-    </tr>`).join('');
+    </tr>`;
+  }).join('');
 
   const reportName = buildPdfName();
 
