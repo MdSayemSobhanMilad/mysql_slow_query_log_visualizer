@@ -1,0 +1,1344 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MySQL Slow Query Log Visualizer</title>
+<!-- Bootstrap Icons -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+<style>
+  :root{
+    --bg:#0d1117;
+    --panel:#161b22;
+    --panel2:#1c2430;
+    --border:#2a3441;
+    --text:#e6edf3;
+    --muted:#8b98a5;
+    --accent:#4dabf7;
+    --green:#3fb950;
+    --yellow:#d29922;
+    --red:#f85149;
+    --purple:#a371f7;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:
+      radial-gradient(1200px 600px at 10% -10%, #1b2a3a 0%, transparent 55%),
+      radial-gradient(900px 500px at 100% 0%, #241b3a 0%, transparent 50%),
+      var(--bg);
+    color:var(--text);
+    min-height:100vh;
+    padding:32px 16px 80px;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:1280px;margin:0 auto}
+
+  header{margin-bottom:28px}
+  h1{font-size:28px;font-weight:700;letter-spacing:-.5px;display:flex;align-items:center;gap:10px}
+  h1 i{color:var(--accent);font-size:26px}
+  header p{color:var(--muted);margin-top:8px;font-size:14px}
+  code{
+    background:var(--panel2);border:1px solid var(--border);border-radius:5px;
+    padding:1px 6px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.9em;color:var(--accent)
+  }
+
+  .card{
+    background:var(--panel);
+    border:1px solid var(--border);
+    border-radius:14px;
+    padding:20px;
+    margin-bottom:20px;
+    box-shadow:0 8px 28px rgba(0,0,0,.35);
+  }
+
+  .tabs{display:flex;gap:8px;margin-bottom:18px;flex-wrap:wrap}
+  .tab{
+    background:transparent;border:1px solid var(--border);color:var(--muted);
+    padding:9px 18px;border-radius:9px;cursor:pointer;font-size:14px;font-weight:600;
+    transition:.15s;font-family:inherit;display:inline-flex;align-items:center;gap:7px;
+  }
+  .tab:hover{color:var(--text);border-color:#3d4b5c}
+  .tab.active{background:linear-gradient(180deg,#1f6feb33,#1f6feb11);border-color:#1f6feb;color:#79c0ff}
+  .tab i{font-size:15px}
+
+  .tabpane{animation:fade .2s ease}
+  @keyframes fade{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+
+  .drop{
+    border:2px dashed #303b4a;border-radius:12px;padding:44px 20px;text-align:center;
+    cursor:pointer;transition:.18s;background:#12171f;
+  }
+  .drop:hover,.drop.drag{border-color:var(--accent);background:#132030}
+  .drop-icon{font-size:38px;margin-bottom:10px;color:var(--accent)}
+  .drop strong{font-size:15px}
+  .muted{color:var(--muted);font-size:13px;margin-top:6px}
+
+  .fileinfo{
+    margin-top:14px;display:flex;align-items:center;gap:10px;
+    background:#132030;border:1px solid #1f6feb55;border-radius:10px;padding:12px 14px;font-size:14px;
+  }
+  .fileinfo .dot{width:9px;height:9px;border-radius:50%;background:var(--green);box-shadow:0 0 8px var(--green)}
+
+  textarea{
+    width:100%;min-height:260px;resize:vertical;background:#0b0f14;color:var(--text);
+    border:1px solid var(--border);border-radius:10px;padding:14px;font-size:13px;line-height:1.55;
+    font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;outline:none;
+  }
+  textarea:focus{border-color:var(--accent);box-shadow:0 0 0 3px #1f6feb22}
+
+  .actions{display:flex;gap:10px;margin-top:16px;flex-wrap:wrap}
+  button.primary{
+    background:linear-gradient(180deg,#1f6feb,#1a5fd0);color:#fff;border:none;
+    padding:11px 26px;border-radius:9px;font-weight:600;font-size:14px;cursor:pointer;
+    transition:.15s;font-family:inherit;display:inline-flex;align-items:center;gap:7px;
+  }
+  button.primary:hover{filter:brightness(1.12);transform:translateY(-1px)}
+  .btn{
+    background:var(--panel2);color:var(--text);border:1px solid var(--border);
+    padding:11px 20px;border-radius:9px;font-weight:600;font-size:14px;cursor:pointer;
+    transition:.15s;font-family:inherit;display:inline-flex;align-items:center;gap:7px;
+  }
+  .btn:hover{border-color:#3d4b5c;background:#232d3b}
+
+  #btnPdf{
+    background:linear-gradient(180deg,#a371f7,#7c4ddb);
+    border:none;color:#fff;
+  }
+  #btnPdf:hover{filter:brightness(1.12);transform:translateY(-1px);border:none}
+
+  .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:20px}
+  .stat{
+    background:linear-gradient(180deg,var(--panel2),#151b23);
+    border:1px solid var(--border);border-radius:12px;padding:16px;
+  }
+  .stat .label{font-size:11px;text-transform:uppercase;letter-spacing:.9px;color:var(--muted);font-weight:700;display:flex;align-items:center;gap:6px}
+  .stat .label i{font-size:12px;color:var(--accent)}
+  .stat .value{font-size:24px;font-weight:700;margin-top:8px;letter-spacing:-.5px}
+  .stat .sub{font-size:11px;color:var(--muted);margin-top:4px}
+  .v-red{color:var(--red)} .v-yellow{color:var(--yellow)} .v-green{color:var(--green)}
+  .v-blue{color:var(--accent)} .v-purple{color:var(--purple)}
+
+  h2.sec{font-size:15px;font-weight:700;margin-bottom:14px;display:flex;align-items:center;gap:8px}
+  h2.sec i{color:var(--accent);font-size:15px}
+  h2.sec small{font-weight:400;color:var(--muted);font-size:12px}
+
+  .bar-item{margin-bottom:14px}
+  .bar-head{display:flex;justify-content:space-between;gap:14px;font-size:12.5px;margin-bottom:6px}
+  .bar-sql{
+    font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    color:#c9d1d9;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;
+  }
+  .bar-val{color:var(--muted);white-space:nowrap;font-weight:600}
+  .bar-val b{color:var(--accent)}
+  .bar-track{height:9px;background:#0b0f14;border-radius:6px;overflow:hidden;border:1px solid #232d3b}
+  .bar-fill{height:100%;border-radius:6px;transition:width .5s cubic-bezier(.2,.8,.3,1)}
+
+  .filters{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:16px}
+  .filters input,.filters select{
+    background:#0b0f14;border:1px solid var(--border);color:var(--text);
+    padding:9px 12px;border-radius:8px;font-size:13px;outline:none;font-family:inherit;
+  }
+  .filters input:focus,.filters select:focus{border-color:var(--accent)}
+  .filters input[type=text]{min-width:230px;flex:1}
+  .filters input[type=number]{width:120px}
+  .filters select#userFilter{min-width:160px}
+  .filters label{font-size:12px;color:var(--muted);font-weight:600;display:inline-flex;align-items:center;gap:5px}
+  .filters label i{font-size:13px;color:var(--accent)}
+
+  .tablewrap{overflow:auto;border:1px solid var(--border);border-radius:12px;max-height:640px}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  thead th{
+    position:sticky;top:0;background:#131a23;z-index:2;
+    text-align:left;padding:11px 12px;font-size:11px;text-transform:uppercase;
+    letter-spacing:.7px;color:var(--muted);border-bottom:1px solid var(--border);white-space:nowrap;
+  }
+  tbody td{padding:10px 12px;border-bottom:1px solid #1e2732;vertical-align:top}
+  tbody tr:hover{background:#1a222d}
+  tbody tr:last-child td{border-bottom:none}
+  td.num{font-family:ui-monospace,Menlo,Consolas,monospace;white-space:nowrap}
+  .pill{
+    display:inline-block;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:700;
+  }
+  .p-red{background:#f8514922;color:#ff7b72;border:1px solid #f8514955}
+  .p-yellow{background:#d2992222;color:#e3b341;border:1px solid #d2992255}
+  .p-green{background:#3fb95022;color:#56d364;border:1px solid #3fb95055}
+  .sqlcell{
+    font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    font-size:12px;color:#a8b3bd;max-width:520px;cursor:pointer;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  }
+  .sqlcell:hover{color:var(--accent)}
+  .sqlcell.expanded{white-space:pre-wrap;word-break:break-word;color:#c9d1d9}
+
+  .empty{padding:40px;text-align:center;color:var(--muted);font-size:14px}
+  .hidden{display:none !important}
+
+  canvas{display:block;width:100%}
+  .legend{display:flex;gap:18px;font-size:12px;color:var(--muted);margin-top:10px;flex-wrap:wrap}
+  .legend span{display:flex;align-items:center;gap:6px}
+  .legend i{width:10px;height:10px;border-radius:50%;display:inline-block}
+
+  .grid2{display:grid;grid-template-columns:1.15fr .85fr;gap:20px}
+  @media(max-width:900px){.grid2{grid-template-columns:1fr}}
+  .notebar{font-size:12px;color:var(--muted);margin-top:10px}
+
+  /* =========================================================
+     PRINT / PDF REPORT STYLES
+     ========================================================= */
+  #printReport{ display:none; }
+
+  @media print{
+    body{ background:#fff !important; color:#111 !important; padding:0 !important; }
+    .wrap > *:not(#printReport){ display:none !important; }
+    #printReport{ display:block !important; }
+
+    @page{ size:A4 portrait; margin:14mm 12mm; }
+
+    * { -webkit-print-color-adjust:exact !important; print-color-adjust:exact !important; }
+
+    #printReport{
+      font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+      color:#1a1f27;
+      font-size:11px;
+      line-height:1.45;
+    }
+
+    .pr-header{
+      border-bottom:3px solid #1f6feb;
+      padding-bottom:14px;
+      margin-bottom:18px;
+      display:flex;
+      justify-content:space-between;
+      align-items:flex-end;
+      gap:20px;
+    }
+    .pr-title{
+      font-size:22px;
+      font-weight:800;
+      letter-spacing:-.6px;
+      color:#0d1117;
+      display:flex;
+      align-items:center;
+      gap:9px;
+    }
+    .pr-title i{ color:#1f6feb; font-size:20px; }
+    .pr-subtitle{
+      font-size:11px;
+      color:#5a6672;
+      margin-top:5px;
+      font-weight:500;
+    }
+    .pr-meta{
+      text-align:right;
+      font-size:10px;
+      color:#5a6672;
+      line-height:1.6;
+    }
+    .pr-meta strong{ color:#1a1f27; }
+
+    .pr-stats{
+      display:grid;
+      grid-template-columns:repeat(4,1fr);
+      gap:8px;
+      margin-bottom:18px;
+    }
+    .pr-stat{
+      border:1px solid #d6dde5;
+      border-radius:8px;
+      padding:9px 11px;
+      background:#f7f9fc;
+      page-break-inside:avoid;
+    }
+    .pr-stat .k{
+      font-size:8px;
+      text-transform:uppercase;
+      letter-spacing:.7px;
+      color:#6b7784;
+      font-weight:800;
+    }
+    .pr-stat .v{
+      font-size:15px;
+      font-weight:800;
+      margin-top:4px;
+      letter-spacing:-.3px;
+      color:#0d1117;
+    }
+    .pr-stat .s{ font-size:8.5px; color:#8a95a1; margin-top:2px; }
+
+    .pr-section{ margin-bottom:18px; page-break-inside:avoid; }
+    .pr-h2{
+      font-size:12px;
+      font-weight:800;
+      text-transform:uppercase;
+      letter-spacing:.8px;
+      color:#1f6feb;
+      border-bottom:1.5px solid #d6dde5;
+      padding-bottom:5px;
+      margin-bottom:10px;
+      display:flex;
+      justify-content:space-between;
+      align-items:baseline;
+      gap:8px;
+    }
+    .pr-h2 i{ font-size:12px; }
+    .pr-h2 small{ font-weight:600; color:#8a95a1; font-size:9px; text-transform:none; letter-spacing:0; }
+
+    .pr-bar{ margin-bottom:8px; page-break-inside:avoid; }
+    .pr-bar-head{
+      display:flex; justify-content:space-between; gap:12px;
+      font-size:9.5px; margin-bottom:3px;
+    }
+    .pr-bar-sql{
+      font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+      color:#2a3441; flex:1;
+      overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+    }
+    .pr-bar-val{ color:#5a6672; white-space:nowrap; font-weight:700; }
+    .pr-bar-val b{ color:#1f6feb; }
+    .pr-bar-track{
+      height:6px; background:#eef1f5; border-radius:4px; overflow:hidden; border:1px solid #e0e6ec;
+    }
+    .pr-bar-fill{ height:100%; border-radius:4px; }
+
+    .pr-tablewrap{
+      border:1px solid #d6dde5;
+      border-radius:8px;
+      overflow:hidden;
+    }
+    .pr-table{
+      width:100%;
+      border-collapse:collapse;
+      font-size:9px;
+      table-layout:fixed;
+    }
+    .pr-table thead th{
+      background:#1f6feb;
+      color:#fff;
+      text-align:left;
+      padding:6px 6px;
+      font-size:8px;
+      text-transform:uppercase;
+      letter-spacing:.5px;
+      font-weight:800;
+      border:none;
+    }
+    .pr-table tbody td{
+      padding:5px 6px;
+      border-bottom:1px solid #e6ebf0;
+      vertical-align:top;
+      color:#2a3441;
+      word-break:break-word;
+    }
+    .pr-table tbody tr:nth-child(even){ background:#f7f9fc; }
+    .pr-table tbody tr:last-child td{ border-bottom:none; }
+    .pr-table td.num{
+      font-family:ui-monospace,Menlo,Consolas,monospace;
+      white-space:nowrap;
+    }
+    .pr-table .pr-sql{
+      font-family:ui-monospace,Menlo,Consolas,monospace;
+      font-size:8.5px;
+      color:#3a4553;
+      word-break:break-word;
+      line-height:1.35;
+    }
+    .pr-pill{
+      display:inline-block;
+      padding:1px 6px;
+      border-radius:20px;
+      font-size:8.5px;
+      font-weight:800;
+      white-space:nowrap;
+    }
+    .pr-pill.red{ background:#fde8e8; color:#b42318; border:1px solid #f5c2c0; }
+    .pr-pill.yellow{ background:#fdf3d7; color:#8a5a00; border:1px solid #f0d68a; }
+    .pr-pill.green{ background:#e3f6e8; color:#1a7f37; border:1px solid #a8dfb8; }
+
+    .pr-table col.c-idx{ width:3%; }
+    .pr-table col.c-ts{ width:13%; }
+    .pr-table col.c-qt{ width:8%; }
+    .pr-table col.c-lk{ width:7%; }
+    .pr-table col.c-sent{ width:7%; }
+    .pr-table col.c-exam{ width:9%; }
+    .pr-table col.c-user{ width:12%; }
+    .pr-table col.c-sql{ width:41%; }
+
+    .pr-footer{
+      margin-top:18px;
+      padding-top:10px;
+      border-top:1px solid #d6dde5;
+      font-size:8.5px;
+      color:#8a95a1;
+      display:flex;
+      justify-content:space-between;
+      gap:20px;
+    }
+
+    .pr-table thead{ display:table-header-group; }
+    .pr-table tr{ page-break-inside:avoid; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <h1><i class="bi bi-stopwatch"></i> MySQL Slow Query Log Visualizer</h1>
+    <p>Upload a <code>slow-query.log</code> file or paste the log contents to explore slow queries, timings, and patterns.</p>
+  </header>
+
+  <!-- ============ INPUT CARD ============ -->
+  <section class="card">
+    <div class="tabs">
+      <button class="tab active" data-tab="upload"><i class="bi bi-folder2-open"></i> Upload File</button>
+      <button class="tab" data-tab="paste"><i class="bi bi-clipboard"></i> Paste Log</button>
+    </div>
+
+    <div class="tabpane" id="pane-upload">
+      <div class="drop" id="drop">
+        <div class="drop-icon"><i class="bi bi-cloud-arrow-up"></i></div>
+        <strong>Drop your slow query log here</strong>
+        <p class="muted">or click to browse — .log, .txt, or any plain text file</p>
+        <input type="file" id="fileInput" accept=".log,.txt,text/plain" hidden>
+      </div>
+      <div class="fileinfo hidden" id="fileInfo">
+        <span class="dot"></span>
+        <span id="fileInfoText"></span>
+      </div>
+    </div>
+
+    <div class="tabpane hidden" id="pane-paste">
+      <textarea id="pasteArea" spellcheck="false"
+        placeholder="Paste your MySQL slow query log here...&#10;&#10;# Time: 2024-01-15T10:23:45.123456Z&#10;# User@Host: app[app] @ 10.0.0.5 []  Id: 1234&#10;# Query_time: 3.214567  Lock_time: 0.000123 Rows_sent: 12  Rows_examined: 845231&#10;SET timestamp=1705314225;&#10;SELECT * FROM orders WHERE customer_id = 42;"></textarea>
+    </div>
+
+    <div class="actions">
+      <button class="primary" id="btnVisualize"><i class="bi bi-bar-chart-line"></i> Visualize</button>
+      <button class="btn" id="btnSample"><i class="bi bi-magic"></i> Load sample</button>
+      <button class="btn" id="btnClear"><i class="bi bi-trash3"></i> Clear</button>
+    </div>
+  </section>
+
+  <!-- ============ RESULTS ============ -->
+  <section id="results" class="hidden">
+
+    <div class="stats" id="stats"></div>
+
+    <div class="grid2">
+      <div class="card">
+        <h2 class="sec"><i class="bi bi-fire"></i> Top Query Patterns <small>by total time</small></h2>
+        <div id="topQueries"></div>
+      </div>
+      <div class="card">
+        <h2 class="sec"><i class="bi bi-graph-up"></i> Query Time Timeline</h2>
+        <div id="timelineWrap"><canvas id="timelineChart"></canvas></div>
+        <div class="legend">
+          <span><i style="background:#4dabf7"></i> Query</span>
+          <span><i style="background:#f85149"></i> Slowest</span>
+        </div>
+        <div class="notebar" id="timelineNote"></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2 class="sec"><i class="bi bi-table"></i> All Slow Queries <small id="tableCount"></small></h2>
+      <div class="filters">
+        <input type="text" id="search" placeholder="Search query text or user…">
+        <label for="userFilter"><i class="bi bi-person"></i> User</label>
+        <select id="userFilter">
+          <option value="">All users</option>
+        </select>
+        <label for="minTime"><i class="bi bi-stopwatch"></i> Min time (s)</label>
+        <input type="number" id="minTime" value="0" min="0" step="0.1">
+        <label for="sortBy"><i class="bi bi-sort-down"></i> Sort</label>
+        <select id="sortBy">
+          <option value="time-desc">Query time ↓</option>
+          <option value="time-asc">Query time ↑</option>
+          <option value="ts-asc">Timestamp ↑</option>
+          <option value="ts-desc">Timestamp ↓</option>
+          <option value="rows-desc">Rows examined ↓</option>
+        </select>
+        <button class="btn" id="btnPdf" style="padding:9px 16px"><i class="bi bi-file-earmark-pdf"></i> Export PDF</button>
+      </div>
+      <div class="tablewrap">
+        <table>
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Timestamp</th>
+              <th>Query Time</th>
+              <th>Lock</th>
+              <th>Rows Sent</th>
+              <th>Rows Examined</th>
+              <th>User</th>
+              <th>Query</th>
+            </tr>
+          </thead>
+          <tbody id="tbody"></tbody>
+        </table>
+      </div>
+      <div class="notebar" id="tableNote"></div>
+    </div>
+
+  </section>
+
+  <!-- ============ PRINT-ONLY PDF REPORT ============ -->
+  <div id="printReport"></div>
+</div>
+
+<script>
+/* =========================================================
+   Helpers
+   ========================================================= */
+const $ = s => document.querySelector(s);
+const maxOf = a => a.reduce((m, v) => Math.max(m, v), -Infinity);
+
+function fmtDur(s){
+  if (s == null || isNaN(s)) return '—';
+  if (s >= 1)   return s.toFixed(3) + ' s';
+  if (s >= 0.001) return (s * 1000).toFixed(1) + ' ms';
+  return (s * 1000000).toFixed(0) + ' µs';
+}
+function fmtNum(n){
+  if (n == null || isNaN(n)) return '—';
+  return Number(n).toLocaleString();
+}
+function fmtTs(ts){
+  if (ts == null) return '—';
+  const d = new Date(ts);
+  return d.toLocaleString(undefined, {year:'numeric',month:'2-digit',day:'2-digit',
+    hour:'2-digit',minute:'2-digit',second:'2-digit'});
+}
+function sevClass(t){
+  if (t >= 5) return 'p-red';
+  if (t >= 1) return 'p-yellow';
+  return 'p-green';
+}
+function barColor(t){
+  if (t >= 5) return 'linear-gradient(90deg,#f85149,#ff7b72)';
+  if (t >= 1) return 'linear-gradient(90deg,#d29922,#e3b341)';
+  return 'linear-gradient(90deg,#1f6feb,#4dabf7)';
+}
+function prBarColor(t){
+  if (t >= 5) return '#b42318';
+  if (t >= 1) return '#b7791f';
+  return '#1f6feb';
+}
+function prPillClass(t){
+  if (t >= 5) return 'red';
+  if (t >= 1) return 'yellow';
+  return 'green';
+}
+
+/* Sanitize a string so it's safe to use inside a filename */
+function sanitizeFilenamePart(str){
+  return String(str || '')
+    .replace(/[^a-zA-Z0-9._-]+/g, '-')   // replace unsafe chars with hyphen
+    .replace(/^-+|-+$/g, '')             // trim leading/trailing hyphens
+    .slice(0, 60);                       // keep it reasonably short
+}
+
+/* Build the PDF base filename (no extension).
+   Pattern: DD-MM-YYYY_[username_]slow-query
+   - user part included only when a specific user is selected in the filter */
+function buildPdfName(){
+  const now = new Date();
+  const dd = String(now.getDate()).padStart(2, '0');
+  const mm = String(now.getMonth() + 1).padStart(2, '0');
+  const yyyy = now.getFullYear();
+
+  const userF = $('#userFilter').value;
+  let userPart = '';
+  if (userF){
+    const safe = sanitizeFilenamePart(userF);
+    if (safe) userPart = safe + '_';
+  }
+  return `${dd}-${mm}-${yyyy}_${userPart}slow-query`;
+}
+
+function normalizeSql(sql){
+  return sql
+    .replace(/\/\*[\s\S]*?\*\//g, ' ')
+    .replace(/--[^\n]*/g, ' ')
+    .replace(/'(?:[^'\\]|\\.)*'/g, '?')
+    .replace(/"(?:[^"\\]|\\.)*"/g, '?')
+    .replace(/\b\d+(?:\.\d+)?\b/g, '?')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase()
+    .slice(0, 220);
+}
+
+function parseLogTime(str){
+  if (!str) return null;
+  let s = str.trim().replace(' ', 'T').replace(/(\.\d{3})\d+/, '$1');
+  const t = Date.parse(s);
+  return isNaN(t) ? null : t;
+}
+
+function escHtml(str){
+  return String(str == null ? '' : str)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
+/* =========================================================
+   Parser
+   ========================================================= */
+function parseSlowLog(text){
+  const lines = text.split(/\r?\n/);
+  const entries = [];
+  let cur = null;
+  let sqlLines = [];
+  let inSql = false;
+
+  function newEntry(){
+    return {
+      timeStr: null, ts: null, userHost: null, user: null, host: null,
+      queryTime: null, lockTime: null, rowsSent: null, rowsExamined: null,
+      sql: '', normalized: ''
+    };
+  }
+
+  function flush(){
+    if (cur && sqlLines.length){
+      cur.sql = sqlLines.join('\n').trim().replace(/;$/, '');
+      if (cur.sql){
+        cur.normalized = normalizeSql(cur.sql);
+        entries.push(cur);
+      }
+    }
+    sqlLines = [];
+    inSql = false;
+    cur = null;
+  }
+
+  for (let i = 0; i < lines.length; i++){
+    const line = lines[i];
+
+    if (line.charAt(0) === '#'){
+      if (/^#\s*Time:/.test(line)){
+        flush();
+        cur = newEntry();
+        cur.timeStr = line.replace(/^#\s*Time:\s*/, '').trim();
+        cur.ts = parseLogTime(cur.timeStr);
+      } else if (/^#\s*User@Host:/.test(line)){
+        if (inSql) flush();
+        if (!cur) cur = newEntry();
+        cur.userHost = line.replace(/^#\s*User@Host:\s*/, '').trim();
+        const m = cur.userHost.match(/^(.*?)\[(.*?)\]\s*@\s*([^\s\[]+)/);
+        if (m){ cur.user = m[1] || m[2]; cur.host = m[3]; }
+        else  { cur.user = cur.userHost; }
+      } else if (/^#\s*Query_time:/.test(line)){
+        if (inSql) flush();
+        if (!cur) cur = newEntry();
+        const qt = line.match(/Query_time:\s*([\d.]+)/);
+        const lt = line.match(/Lock_time:\s*([\d.]+)/);
+        const rs = line.match(/Rows_sent:\s*(\d+)/);
+        const re = line.match(/Rows_examined:\s*(\d+)/);
+        if (qt) cur.queryTime = parseFloat(qt[1]);
+        if (lt) cur.lockTime = parseFloat(lt[1]);
+        if (rs) cur.rowsSent = parseInt(rs[1], 10);
+        if (re) cur.rowsExamined = parseInt(re[1], 10);
+      }
+      continue;
+    }
+
+    if (line.trim() === '') continue;
+
+    const tsMatch = line.match(/^SET\s+timestamp\s*=\s*(\d+)\s*;/i);
+    if (tsMatch){
+      if (!cur) cur = newEntry();
+      if (cur.ts == null) cur.ts = parseInt(tsMatch[1], 10) * 1000;
+      continue;
+    }
+
+    inSql = true;
+    sqlLines.push(line);
+  }
+  flush();
+
+  return entries.filter(e => e.queryTime != null);
+}
+
+/* =========================================================
+   State
+   ========================================================= */
+let ALL = [];
+let FILTERED = [];
+let uploadedText = '';
+let activeTab = 'upload';
+const MAX_ROWS = 600;
+
+/* =========================================================
+   Tabs
+   ========================================================= */
+document.querySelectorAll('.tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    tab.classList.add('active');
+    activeTab = tab.dataset.tab;
+    $('#pane-upload').classList.toggle('hidden', activeTab !== 'upload');
+    $('#pane-paste').classList.toggle('hidden', activeTab !== 'paste');
+  });
+});
+
+/* =========================================================
+   File upload
+   ========================================================= */
+const drop = $('#drop');
+const fileInput = $('#fileInput');
+
+drop.addEventListener('click', () => fileInput.click());
+drop.addEventListener('dragover', e => { e.preventDefault(); drop.classList.add('drag'); });
+drop.addEventListener('dragleave', () => drop.classList.remove('drag'));
+drop.addEventListener('drop', e => {
+  e.preventDefault();
+  drop.classList.remove('drag');
+  if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+});
+fileInput.addEventListener('change', e => {
+  if (e.target.files.length) handleFile(e.target.files[0]);
+});
+
+function handleFile(file){
+  const reader = new FileReader();
+  reader.onload = e => {
+    uploadedText = e.target.result;
+    $('#fileInfo').classList.remove('hidden');
+    $('#fileInfoText').textContent =
+      `${file.name} — ${(file.size / 1024).toFixed(1)} KB`;
+    visualize();
+  };
+  reader.readAsText(file);
+}
+
+/* =========================================================
+   Visualize
+   ========================================================= */
+$('#btnVisualize').addEventListener('click', visualize);
+
+function visualize(){
+  let text = '';
+  if (activeTab === 'upload'){
+    text = uploadedText;
+    if (!text){ alert('Please choose a slow query log file first.'); return; }
+  } else {
+    text = $('#pasteArea').value;
+    if (!text.trim()){ alert('Please paste some log content first.'); return; }
+  }
+
+  ALL = parseSlowLog(text);
+  if (!ALL.length){
+    alert('No slow query entries were found.\n\nMake sure the file is a MySQL slow query log ' +
+          '(it should contain "# Query_time:" lines).');
+    return;
+  }
+
+  const users = [...new Set(ALL.map(e => e.user).filter(Boolean))].sort((a,b) =>
+    a.localeCompare(b, undefined, { sensitivity: 'base' })
+  );
+  const userSel = $('#userFilter');
+  userSel.innerHTML = '<option value="">All users</option>' +
+    users.map(u => `<option value="${escHtml(u)}">${escHtml(u)}</option>`).join('');
+
+  $('#results').classList.remove('hidden');
+  applyFilters();
+  $('#results').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+/* =========================================================
+   Filters / sorting
+   ========================================================= */
+['#search', '#minTime', '#sortBy', '#userFilter'].forEach(sel => {
+  $(sel).addEventListener('input', applyFilters);
+  $(sel).addEventListener('change', applyFilters);
+});
+
+function applyFilters(){
+  const q = $('#search').value.trim().toLowerCase();
+  const minT = parseFloat($('#minTime').value) || 0;
+  const sortBy = $('#sortBy').value;
+  const userF = $('#userFilter').value;
+
+  FILTERED = ALL.filter(e =>
+    (e.queryTime >= minT) &&
+    (!userF || e.user === userF) &&
+    (!q || e.sql.toLowerCase().includes(q) ||
+           (e.user || '').toLowerCase().includes(q) ||
+           (e.host || '').toLowerCase().includes(q))
+  );
+
+  const cmp = {
+    'time-desc': (a, b) => b.queryTime - a.queryTime,
+    'time-asc' : (a, b) => a.queryTime - b.queryTime,
+    'ts-asc'   : (a, b) => (a.ts ?? 0) - (b.ts ?? 0),
+    'ts-desc'  : (a, b) => (b.ts ?? 0) - (a.ts ?? 0),
+    'rows-desc': (a, b) => (b.rowsExamined ?? 0) - (a.rowsExamined ?? 0)
+  }[sortBy];
+  FILTERED.sort(cmp);
+
+  renderStats();
+  renderTopQueries();
+  renderTimeline();
+  renderTable();
+}
+
+/* =========================================================
+   Stats
+   ========================================================= */
+function renderStats(){
+  const el = $('#stats');
+  el.innerHTML = '';
+
+  const data = FILTERED;
+  if (!data.length){
+    el.innerHTML = '<div class="card empty">No queries match the current filters.</div>';
+    return;
+  }
+
+  const times = data.map(d => d.queryTime);
+  const total = times.reduce((a, b) => a + b, 0);
+  const avg = total / times.length;
+  const max = maxOf(times);
+  const rowsExam = data.reduce((a, b) => a + (b.rowsExamined || 0), 0);
+  const unique = new Set(data.map(d => d.normalized)).size;
+  const over1 = data.filter(d => d.queryTime >= 1).length;
+
+  const slowest = data.reduce((a, b) => (b.queryTime > a.queryTime ? b : a), data[0]);
+
+  const cards = [
+    { icon:'bi-collection',        label: 'Total Queries',    value: fmtNum(data.length), sub: `of ${fmtNum(ALL.length)} parsed`, cls: 'v-blue' },
+    { icon:'bi-hourglass-split',   label: 'Total Query Time', value: fmtDur(total),       sub: 'sum of all query times',        cls: 'v-purple' },
+    { icon:'bi-speedometer2',      label: 'Average Time',     value: fmtDur(avg),         sub: 'per query',                     cls: 'v-green' },
+    { icon:'bi-exclamation-octagon',label:'Slowest Query',    value: fmtDur(max),         sub: fmtTs(slowest.ts),               cls: 'v-red' },
+    { icon:'bi-database',          label: 'Rows Examined',    value: fmtNum(rowsExam),    sub: 'total across queries',          cls: 'v-yellow' },
+    { icon:'bi-diagram-3',         label: 'Unique Patterns',  value: fmtNum(unique),      sub: 'after normalizing literals',    cls: 'v-blue' },
+    { icon:'bi-alarm',             label: 'Queries ≥ 1s',     value: fmtNum(over1),       sub: `${((over1 / data.length) * 100).toFixed(1)}% of shown`, cls: 'v-red' }
+  ];
+
+  cards.forEach(c => {
+    const d = document.createElement('div');
+    d.className = 'stat';
+    d.innerHTML = `<div class="label"><i class="bi ${c.icon}"></i>${c.label}</div>
+                   <div class="value ${c.cls}">${c.value}</div>
+                   <div class="sub">${c.sub}</div>`;
+    el.appendChild(d);
+  });
+}
+
+/* =========================================================
+   Top query patterns
+   ========================================================= */
+function renderTopQueries(){
+  const box = $('#topQueries');
+  box.innerHTML = '';
+
+  if (!FILTERED.length){
+    box.innerHTML = '<div class="empty">No data.</div>';
+    return;
+  }
+
+  const groups = new Map();
+  FILTERED.forEach(e => {
+    let g = groups.get(e.normalized);
+    if (!g){
+      g = { sql: e.sql, count: 0, total: 0, max: 0, rows: 0 };
+      groups.set(e.normalized, g);
+    }
+    g.count++;
+    g.total += e.queryTime;
+    g.max = Math.max(g.max, e.queryTime);
+    g.rows += (e.rowsExamined || 0);
+  });
+
+  const arr = [...groups.values()].sort((a, b) => b.total - a.total).slice(0, 10);
+  const maxTotal = maxOf(arr.map(a => a.total)) || 1;
+
+  arr.forEach(g => {
+    const item = document.createElement('div');
+    item.className = 'bar-item';
+
+    const head = document.createElement('div');
+    head.className = 'bar-head';
+
+    const sql = document.createElement('span');
+    sql.className = 'bar-sql';
+    sql.textContent = g.sql.replace(/\s+/g, ' ').slice(0, 160);
+    sql.title = g.sql;
+
+    const val = document.createElement('span');
+    val.className = 'bar-val';
+    val.innerHTML = `<b>${fmtDur(g.total)}</b> · ${g.count}× · max ${fmtDur(g.max)}`;
+
+    head.appendChild(sql);
+    head.appendChild(val);
+
+    const track = document.createElement('div');
+    track.className = 'bar-track';
+    const fill = document.createElement('div');
+    fill.className = 'bar-fill';
+    fill.style.width = Math.max(2, (g.total / maxTotal) * 100) + '%';
+    fill.style.background = barColor(g.max);
+    track.appendChild(fill);
+
+    item.appendChild(head);
+    item.appendChild(track);
+    box.appendChild(item);
+  });
+}
+
+/* =========================================================
+   Timeline chart
+   ========================================================= */
+function renderTimeline(){
+  const pts = FILTERED.filter(d => d.ts != null);
+  const note = $('#timelineNote');
+  const wrap = $('#timelineWrap');
+
+  if (pts.length < 2){
+    wrap.classList.add('hidden');
+    note.textContent = 'Not enough timestamped entries to draw a timeline.';
+    return;
+  }
+  wrap.classList.remove('hidden');
+  note.textContent = `${pts.length} timestamped queries`;
+
+  const canvas = $('#timelineChart');
+  const dpr = window.devicePixelRatio || 1;
+  const W = wrap.clientWidth || 480;
+  const H = 280;
+  canvas.width = W * dpr;
+  canvas.height = H * dpr;
+  canvas.style.width = W + 'px';
+  canvas.style.height = H + 'px';
+
+  const ctx = canvas.getContext('2d');
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, W, H);
+
+  const padL = 62, padR = 16, padT = 16, padB = 38;
+  const plotW = W - padL - padR;
+  const plotH = H - padT - padB;
+
+  const tMin = Math.min(...pts.map(p => p.ts));
+  const tMax = Math.max(...pts.map(p => p.ts));
+  const tRange = (tMax - tMin) || 1;
+  const yMax = maxOf(pts.map(p => p.queryTime)) * 1.15 || 1;
+
+  const X = t => padL + ((t - tMin) / tRange) * plotW;
+  const Y = v => padT + plotH - (v / yMax) * plotH;
+
+  ctx.font = '11px ui-monospace, Menlo, monospace';
+  ctx.textBaseline = 'middle';
+  const steps = 4;
+  for (let i = 0; i <= steps; i++){
+    const v = (yMax / steps) * i;
+    const y = Y(v);
+    ctx.strokeStyle = '#232d3b';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(padL, y + .5);
+    ctx.lineTo(W - padR, y + .5);
+    ctx.stroke();
+
+    ctx.fillStyle = '#8b98a5';
+    ctx.textAlign = 'right';
+    ctx.fillText(v.toFixed(2) + 's', padL - 8, y);
+  }
+
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'top';
+  for (let i = 0; i <= 4; i++){
+    const t = tMin + (tRange / 4) * i;
+    const x = X(t);
+    ctx.fillStyle = '#8b98a5';
+    const d = new Date(t);
+    ctx.fillText(
+      d.toLocaleTimeString(undefined, {hour:'2-digit', minute:'2-digit', second:'2-digit'}),
+      x, padT + plotH + 10
+    );
+  }
+
+  const slowest = pts.reduce((a, b) => (b.queryTime > a.queryTime ? b : a), pts[0]);
+  pts.forEach(p => {
+    const x = X(p.ts);
+    const y = Y(p.queryTime);
+    const isSlowest = p === slowest;
+    const r = isSlowest ? 6 : 4;
+
+    ctx.beginPath();
+    ctx.arc(x, y, r + 4, 0, Math.PI * 2);
+    ctx.fillStyle = isSlowest ? 'rgba(248,81,73,.18)' : 'rgba(77,171,247,.13)';
+    ctx.fill();
+
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fillStyle = isSlowest ? '#f85149' : 'rgba(77,171,247,.85)';
+    ctx.fill();
+    ctx.strokeStyle = isSlowest ? '#ff7b72' : '#4dabf7';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+  });
+
+  ctx.strokeStyle = '#2a3441';
+  ctx.beginPath();
+  ctx.moveTo(padL + .5, padT);
+  ctx.lineTo(padL + .5, padT + plotH);
+  ctx.lineTo(W - padR, padT + plotH);
+  ctx.stroke();
+}
+
+let resizeTimer;
+window.addEventListener('resize', () => {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(() => { if (FILTERED.length) renderTimeline(); }, 150);
+});
+
+/* =========================================================
+   Table
+   ========================================================= */
+function renderTable(){
+  const tbody = $('#tbody');
+  tbody.innerHTML = '';
+
+  if (!FILTERED.length){
+    const tr = document.createElement('tr');
+    tr.innerHTML = '<td colspan="8"><div class="empty">No queries match the current filters.</div></td>';
+    tbody.appendChild(tr);
+    $('#tableCount').textContent = '';
+    $('#tableNote').textContent = '';
+    return;
+  }
+
+  const shown = FILTERED.slice(0, MAX_ROWS);
+  const frag = document.createDocumentFragment();
+
+  shown.forEach((e, i) => {
+    const tr = document.createElement('tr');
+
+    const tdIdx = document.createElement('td');
+    tdIdx.className = 'num';
+    tdIdx.style.color = '#8b98a5';
+    tdIdx.textContent = i + 1;
+
+    const tdTs = document.createElement('td');
+    tdTs.className = 'num';
+    tdTs.style.whiteSpace = 'nowrap';
+    tdTs.textContent = fmtTs(e.ts);
+    if (e.ts == null && e.timeStr) tdTs.textContent = e.timeStr;
+
+    const tdQt = document.createElement('td');
+    const pill = document.createElement('span');
+    pill.className = 'pill ' + sevClass(e.queryTime);
+    pill.textContent = fmtDur(e.queryTime);
+    tdQt.appendChild(pill);
+
+    const tdLock = document.createElement('td');
+    tdLock.className = 'num';
+    tdLock.style.color = '#8b98a5';
+    tdLock.textContent = e.lockTime != null ? fmtDur(e.lockTime) : '—';
+
+    const tdSent = document.createElement('td');
+    tdSent.className = 'num';
+    tdSent.textContent = fmtNum(e.rowsSent);
+
+    const tdExam = document.createElement('td');
+    tdExam.className = 'num';
+    tdExam.textContent = fmtNum(e.rowsExamined);
+
+    const tdUser = document.createElement('td');
+    tdUser.style.whiteSpace = 'nowrap';
+    tdUser.textContent = e.user || '—';
+    if (e.host){
+      const small = document.createElement('div');
+      small.style.fontSize = '11px';
+      small.style.color = '#8b98a5';
+      small.textContent = e.host;
+      tdUser.appendChild(small);
+    }
+
+    const tdSql = document.createElement('td');
+    const codeEl = document.createElement('div');
+    codeEl.className = 'sqlcell';
+    codeEl.textContent = e.sql.replace(/\s+/g, ' ');
+    codeEl.title = 'Click to expand / collapse';
+    codeEl.addEventListener('click', () => codeEl.classList.toggle('expanded'));
+    tdSql.appendChild(codeEl);
+
+    tr.append(tdIdx, tdTs, tdQt, tdLock, tdSent, tdExam, tdUser, tdSql);
+    frag.appendChild(tr);
+  });
+
+  tbody.appendChild(frag);
+
+  $('#tableCount').textContent = `(${fmtNum(FILTERED.length)} shown)`;
+  $('#tableNote').textContent = FILTERED.length > MAX_ROWS
+    ? `Showing the first ${MAX_ROWS} of ${fmtNum(FILTERED.length)} rows. Narrow your filters to see more.`
+    : 'Click any query cell to expand it.';
+}
+
+/* =========================================================
+   PDF EXPORT (styled print report + user-aware filename)
+   ========================================================= */
+$('#btnPdf').addEventListener('click', exportPDF);
+
+function exportPDF(){
+  if (!FILTERED.length){ alert('Nothing to export — no queries match the current filters.'); return; }
+
+  buildPrintReport();
+
+  // Filename pattern: DD-MM-YYYY_[username_]slow-query
+  const pdfName = buildPdfName();
+
+  const originalTitle = document.title;
+  document.title = pdfName;   // browsers use document.title as the default PDF filename
+
+  requestAnimationFrame(() => {
+    setTimeout(() => {
+      try {
+        window.print();       // synchronous in most browsers
+      } finally {
+        setTimeout(() => { document.title = originalTitle; }, 200);
+      }
+    }, 60);
+  });
+}
+
+function buildPrintReport(){
+  const data = FILTERED;
+  const times = data.map(d => d.queryTime);
+  const total = times.reduce((a, b) => a + b, 0);
+  const avg = total / times.length;
+  const max = maxOf(times);
+  const rowsExam = data.reduce((a, b) => a + (b.rowsExamined || 0), 0);
+  const unique = new Set(data.map(d => d.normalized)).size;
+  const over1 = data.filter(d => d.queryTime >= 1).length;
+  const slowest = data.reduce((a, b) => (b.queryTime > a.queryTime ? b : a), data[0]);
+
+  const generated = new Date().toLocaleString();
+
+  // Reflect the CURRENT filters in the PDF subtitle
+  const filtersActive = [];
+  const q = $('#search').value.trim();
+  const userF = $('#userFilter').value;
+  const minT = parseFloat($('#minTime').value) || 0;
+  if (q) filtersActive.push(`search "${escHtml(q)}"`);
+  if (userF) filtersActive.push(`user = ${escHtml(userF)}`);
+  if (minT > 0) filtersActive.push(`min time ≥ ${minT}s`);
+  const filterNote = filtersActive.length
+    ? `Filtered by ${filtersActive.join(' · ')}`
+    : 'No filters applied';
+
+  // Stat cards
+  const tsPoints = data.filter(d => d.ts).map(d => d.ts);
+  const timeRange = tsPoints.length
+    ? `${fmtTs(Math.min(...tsPoints))} → ${fmtTs(Math.max(...tsPoints))}`
+    : 'no timestamps';
+  const timeRangeSub = tsPoints.length ? 'span of captured queries' : 'timestamps unavailable';
+
+  const statCards = [
+    ['Total Queries',    fmtNum(data.length),  `of ${fmtNum(ALL.length)} parsed`],
+    ['Total Query Time', fmtDur(total),        'sum of all query times'],
+    ['Average Time',     fmtDur(avg),          'per query'],
+    ['Slowest Query',    fmtDur(max),          fmtTs(slowest.ts)],
+    ['Rows Examined',    fmtNum(rowsExam),     'total across queries'],
+    ['Unique Patterns',  fmtNum(unique),       'after normalizing literals'],
+    ['Queries ≥ 1s',     fmtNum(over1),        `${((over1 / data.length) * 100).toFixed(1)}% of shown`],
+    ['Time Range',       timeRange.split(' → ')[0] || '—', timeRangeSub]
+  ];
+
+  const statsHtml = statCards.map(([k, v, s]) => `
+    <div class="pr-stat">
+      <div class="k">${escHtml(k)}</div>
+      <div class="v">${escHtml(v)}</div>
+      <div class="s">${escHtml(s)}</div>
+    </div>`).join('');
+
+  // Top query patterns
+  const groups = new Map();
+  data.forEach(e => {
+    let g = groups.get(e.normalized);
+    if (!g){ g = { sql: e.sql, count: 0, total: 0, max: 0 }; groups.set(e.normalized, g); }
+    g.count++; g.total += e.queryTime; g.max = Math.max(g.max, e.queryTime);
+  });
+  const topArr = [...groups.values()].sort((a, b) => b.total - a.total).slice(0, 8);
+  const topMax = maxOf(topArr.map(a => a.total)) || 1;
+
+  const topHtml = topArr.map(g => {
+    const pct = Math.max(3, (g.total / topMax) * 100);
+    const color = prBarColor(g.max);
+    return `
+      <div class="pr-bar">
+        <div class="pr-bar-head">
+          <span class="pr-bar-sql" title="${escHtml(g.sql)}">${escHtml(g.sql.replace(/\s+/g,' ').slice(0,150))}</span>
+          <span class="pr-bar-val"><b>${escHtml(fmtDur(g.total))}</b> · ${g.count}× · max ${escHtml(fmtDur(g.max))}</span>
+        </div>
+        <div class="pr-bar-track"><div class="pr-bar-fill" style="width:${pct}%;background:${color}"></div></div>
+      </div>`;
+  }).join('');
+
+  // Table rows
+  const rowsHtml = data.map((e, i) => `
+    <tr>
+      <td class="num" style="color:#8a95a1">${i + 1}</td>
+      <td class="num">${escHtml(e.ts != null ? fmtTs(e.ts) : (e.timeStr || '—'))}</td>
+      <td><span class="pr-pill ${prPillClass(e.queryTime)}">${escHtml(fmtDur(e.queryTime))}</span></td>
+      <td class="num" style="color:#5a6672">${escHtml(e.lockTime != null ? fmtDur(e.lockTime) : '—')}</td>
+      <td class="num">${escHtml(fmtNum(e.rowsSent))}</td>
+      <td class="num">${escHtml(fmtNum(e.rowsExamined))}</td>
+      <td>${escHtml(e.user || '—')}${e.host ? `<br><span style="color:#8a95a1;font-size:8px">${escHtml(e.host)}</span>` : ''}</td>
+      <td><div class="pr-sql">${escHtml(e.sql.replace(/\s+/g,' '))}</div></td>
+    </tr>`).join('');
+
+  // Report name inside the doc — same pattern as the filename
+  const reportName = buildPdfName();
+
+  const html = `
+    <div class="pr-header">
+      <div>
+        <div class="pr-title"><i class="bi bi-stopwatch"></i> MySQL Slow Query Log Report</div>
+        <div class="pr-subtitle">${filterNote} · ${fmtNum(data.length)} slow ${data.length === 1 ? 'query' : 'queries'} analyzed</div>
+      </div>
+      <div class="pr-meta">
+        <div>Generated <strong>${escHtml(generated)}</strong></div>
+        <div>File <strong>${escHtml(reportName)}.pdf</strong></div>
+      </div>
+    </div>
+
+    <div class="pr-section">
+      <div class="pr-h2"><span><i class="bi bi-clipboard-data"></i> Summary Statistics</span> <small>over ${fmtNum(data.length)} filtered queries</small></div>
+      <div class="pr-stats">${statsHtml}</div>
+    </div>
+
+    <div class="pr-section">
+      <div class="pr-h2"><span><i class="bi bi-fire"></i> Top Query Patterns</span> <small>grouped by normalized SQL, ranked by total time</small></div>
+      ${topHtml || '<div style="color:#8a95a1;font-size:10px">No patterns found.</div>'}
+    </div>
+
+    <div class="pr-section">
+      <div class="pr-h2"><span><i class="bi bi-table"></i> Slow Query Detail</span> <small>${fmtNum(data.length)} ${data.length === 1 ? 'entry' : 'entries'}</small></div>
+      <div class="pr-tablewrap">
+        <table class="pr-table">
+          <colgroup>
+            <col class="c-idx"><col class="c-ts"><col class="c-qt"><col class="c-lk">
+            <col class="c-sent"><col class="c-exam"><col class="c-user"><col class="c-sql">
+          </colgroup>
+          <thead>
+            <tr>
+              <th>#</th><th>Timestamp</th><th>Query Time</th><th>Lock</th>
+              <th>Rows Sent</th><th>Rows Examined</th><th>User</th><th>Query</th>
+            </tr>
+          </thead>
+          <tbody>${rowsHtml}</tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="pr-footer">
+      <span>MySQL Slow Query Log Visualizer · ${escHtml(reportName)}.pdf · ${escHtml(generated)}</span>
+      <span>${fmtNum(data.length)} queries · total ${escHtml(fmtDur(total))} · avg ${escHtml(fmtDur(avg))}</span>
+    </div>
+  `;
+
+  $('#printReport').innerHTML = html;
+}
+
+/* =========================================================
+   Sample / Clear
+   ========================================================= */
+const SAMPLE = `# Time: 2024-01-15T10:23:45.123456Z
+# User@Host: app[app] @ 10.0.0.5 []  Id:  1234
+# Query_time: 8.214567  Lock_time: 0.000123 Rows_sent: 12  Rows_examined: 845231
+SET timestamp=1705314225;
+SELECT * FROM orders WHERE customer_id = 42 AND status = 'pending' ORDER BY created_at DESC;
+
+# Time: 2024-01-15T10:24:02.654321Z
+# User@Host: app[app] @ 10.0.0.5 []  Id:  1235
+# Query_time: 0.512345  Lock_time: 0.000045 Rows_sent: 1  Rows_examined: 10023
+SET timestamp=1705314242;
+SELECT COUNT(*) FROM sessions WHERE last_seen < '2024-01-01' AND active = 1;
+
+# Time: 2024-01-15T10:24:19.111222Z
+# User@Host: reporting[reporting] @ 10.0.0.9 []  Id:  1240
+# Query_time: 12.887654  Lock_time: 0.002310 Rows_sent: 50231  Rows_examined: 5023144
+SET timestamp=1705314259;
+SELECT o.id, o.total, c.name FROM orders o JOIN customers c ON c.id = o.customer_id WHERE o.created_at BETWEEN '2024-01-01' AND '2024-01-31';
+
+# Time: 2024-01-15T10:25:03.998877Z
+# User@Host: app[app] @ 10.0.0.5 []  Id:  1241
+# Query_time: 1.204500  Lock_time: 0.000090 Rows_sent: 340  Rows_examined: 98211
+SET timestamp=1705314303;
+SELECT * FROM products WHERE category_id = 7 AND price > 100 ORDER BY price ASC LIMIT 50;
+
+# Time: 2024-01-15T10:25:44.332211Z
+# User@Host: app[app] @ 10.0.0.6 []  Id:  1245
+# Query_time: 0.089234  Lock_time: 0.000012 Rows_sent: 1  Rows_examined: 1
+SET timestamp=1705314344;
+SELECT * FROM users WHERE id = 991;
+
+# Time: 2024-01-15T10:26:12.443322Z
+# User@Host: reporting[reporting] @ 10.0.0.9 []  Id:  1250
+# Query_time: 15.332100  Lock_time: 0.004500 Rows_sent: 1  Rows_examined: 9120043
+SET timestamp=1705314372;
+SELECT COUNT(*) FROM orders o JOIN order_items i ON i.order_id = o.id WHERE o.status = 'shipped' AND i.quantity > 3;
+
+# Time: 2024-01-15T10:27:01.556677Z
+# User@Host: app[app] @ 10.0.0.5 []  Id:  1253
+# Query_time: 2.771200  Lock_time: 0.000340 Rows_sent: 0  Rows_examined: 445120
+SET timestamp=1705314421;
+UPDATE inventory SET reserved = reserved + 1 WHERE sku = 'SKU-99120' AND warehouse_id = 3;
+
+# Time: 2024-01-15T10:27:48.889900Z
+# User@Host: batch[batch] @ localhost []  Id:  1260
+# Query_time: 6.009900  Lock_time: 0.001200 Rows_sent: 12000  Rows_examined: 1200000
+SET timestamp=1705314468;
+SELECT * FROM audit_log WHERE created_at >= '2024-01-14' AND action = 'login';
+
+# Time: 2024-01-15T10:28:31.112233Z
+# User@Host: app[app] @ 10.0.0.6 []  Id:  1265
+# Query_time: 1.881100  Lock_time: 0.000700 Rows_sent: 25  Rows_examined: 302119
+SET timestamp=1705314511;
+SELECT p.*, (SELECT COUNT(*) FROM reviews r WHERE r.product_id = p.id) AS review_count FROM products p WHERE p.active = 1 ORDER BY p.created_at DESC LIMIT 20;
+
+# Time: 2024-01-15T10:29:09.445566Z
+# User@Host: app[app] @ 10.0.0.5 []  Id:  1270
+# Query_time: 0.312400  Lock_time: 0.000020 Rows_sent: 5  Rows_examined: 15200
+SET timestamp=1705314549;
+SELECT * FROM coupons WHERE code = 'SPRING24' AND expires_at > NOW();
+
+# Time: 2024-01-15T10:30:00.778899Z
+# User@Host: reporting[reporting] @ 10.0.0.9 []  Id:  1275
+# Query_time: 9.443300  Lock_time: 0.001800 Rows_sent: 365  Rows_examined: 6300221
+SET timestamp=1705314600;
+SELECT DATE(created_at) d, SUM(total) FROM orders WHERE created_at >= '2023-01-01' GROUP BY d ORDER BY d;
+
+# Time: 2024-01-15T10:30:41.223344Z
+# User@Host: app[app] @ 10.0.0.5 []  Id:  1280
+# Query_time: 0.654321  Lock_time: 0.000055 Rows_sent: 3  Rows_examined: 48200
+SET timestamp=1705314641;
+SELECT * FROM orders WHERE customer_id = 42 AND status = 'pending' ORDER BY created_at DESC;
+`;
+
+$('#btnSample').addEventListener('click', () => {
+  document.querySelector('.tab[data-tab="paste"]').click();
+  $('#pasteArea').value = SAMPLE;
+  visualize();
+});
+
+$('#btnClear').addEventListener('click', () => {
+  uploadedText = '';
+  fileInput.value = '';
+  $('#fileInfo').classList.add('hidden');
+  $('#pasteArea').value = '';
+  ALL = []; FILTERED = [];
+  $('#results').classList.add('hidden');
+  $('#search').value = '';
+  $('#minTime').value = 0;
+  $('#sortBy').value = 'time-desc';
+  $('#userFilter').innerHTML = '<option value="">All users</option>';
+});
+</script>
+</body>
+</html>
